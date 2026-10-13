@@ -1,0 +1,18 @@
+# Spec gaps and how they are handled
+
+Findings from reading the spec before writing code. None of them changes stories, rules, tables or endpoints.
+Where a decision was needed, the option that keeps the data model and the contract untouched was chosen, and the item is
+left visible for the spec owner.
+
+| # | Finding | Where | Handling |
+|---|---|---|---|
+| G-1 | ADR-002 and T-13 talk about a **version token** on the book, but `data-model.md` §3 has no version column. | `adr-002`, `tasks.md` T-13, `data-model.md` §3 | No column is added (Article X: the data model wins). The last copy is protected with an atomic conditional update: `UPDATE book SET available_copies = available_copies - 1 WHERE id = ? AND available_copies > 0 AND deleted_at IS NULL`. Zero affected rows → 409 `BOOK_NOT_AVAILABLE` and the whole loan transaction rolls back. `ck_book_available_range` stays as the last barrier. RNF-2 evidence is the same: two concurrent loans of the last copy, one 201 and one 409. |
+| G-2 | Language. Article XI: code, columns and routes in English; documentation and **user messages in Spanish**. The contract's error `message` examples are in Spanish. | `constitution.md` XI, `api-contract.md` §1 | Code, branches, commits, routes, fields and error `code` values in English. Error `message` texts in Spanish, as the contract requires. Language of new documentation to be confirmed with the instructor. |
+| G-3 | `GET /books/{id}/cover` is described in the text of §3.4 but is missing from the endpoints table. Its role is not stated. | `api-contract.md` §3.4 | Implemented because the contract text defines it. Assumed role: authenticated (same as `GET /books/{id}`). |
+| G-4 | `GET /loans/overdue` and `GET /loans/{id}` share a prefix. | `api-contract.md` §3.6 | Register `/loans/overdue` before `/loans/{id}` (or constrain `{id}` to UUID format) so `overdue` is never read as an id. |
+| G-5 | Identifiers must be UUID v4. | `api-contract.md` §1 | Generate with `Str::uuid()` in the application. Do not rely on Laravel's `HasUuids` default, whose UUID version depends on the Laravel version. |
+| G-6 | "Six entities, six tables". Laravel creates default tables and a `migrations` bookkeeping table. | `data-model.md` §2 | Default Laravel migrations are deleted. The `migrations` bookkeeping table is framework metadata, not part of the domain; keep it out of schema `library` (e.g. `public.migrations`) so §10 queries list only the six tables. |
+| G-7 | `ck_book_total_positive` and `ck_user_role` are marked **pending (T-18)**. | `data-model.md` §4 | Not included in the initial migration. Added later in their own migration as T-18, together with the update of the marks in `data-model.md` §4. |
+| G-8 | Report `from` / `to` are dates, both inclusive, while `loan.loaned_at` is `timestamptz`. | `api-contract.md` §3.7 | Interpreted in UTC as `loaned_at >= from 00:00Z` and `loaned_at < (to + 1 day) 00:00Z`. |
+| G-9 | `GET /members/{id}` returns `active_loans`, which is not a column. | `api-contract.md` §3.5 | Computed (count of the member's `loan_item` rows with `returned_at IS NULL`), consistent with Article VII. |
+| G-10 | Article I, II and III are verified with `import-linter`, a Python tool. | `constitution.md` | Replaced by architecture tests in PHP (see `stack-mapping.md` §3). The rule being verified does not change. |
